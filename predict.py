@@ -1,270 +1,134 @@
-<!DOCTYPE HTML>
-<html>
+from torchvision import datasets, transforms, models
 
-<head>
-    <meta charset="utf-8">
+#cd ImageClassifier
+import torch
+from torch import nn
+import argparse
+from PIL import Image
+import numpy as np
 
-    <title>predict.py (editing)</title>
-    <link id="favicon" rel="shortcut icon" type="image/x-icon" href="/static/base/images/favicon-file.ico?v=e2776a7f45692c839d6eea7d7ff6f3b2">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <link rel="stylesheet" href="/static/components/jquery-ui/themes/smoothness/jquery-ui.min.css?v=3c2a865c832a1322285c55c6ed99abb2" type="text/css" />
-    <link rel="stylesheet" href="/static/components/jquery-typeahead/dist/jquery.typeahead.min.css?v=7afb461de36accb1aa133a1710f5bc56" type="text/css" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+parser = argparse.ArgumentParser(description='Short sample app')
+parser.add_argument('image_filename')
+parser.add_argument("checkpoint_filename", default="/home/workspace/ImageClassifier/commandline-checkpoint.pth")
+parser.add_argument("--gpu", action="store_true", default=False)
+parser.add_argument("--top_k", default=1, type=int)
+parser.add_argument("--category_names", default="use checkpoint")
+
+
+args = parser.parse_args()
+
+image_filename = args.image_filename
+checkpoint_filename = args.checkpoint_filename
+gpu_option = args.gpu
+
+print(gpu_option)
+
+#cd ImageClassifier
+#example image file /home/workspace/ImageClassifier/flowers/valid/1/image_06739.jpg
+#command format: python predict.py /path/to/image checkpoint
+#sample command: python predict.py /home/workspace/ImageClassifier/flowers/valid/1/image_06739.jpg commandline-checkpoint.pth
+#sample command 2: python predict.py /home/workspace/ImageClassifier/flowers/valid/52/image_04215.jpg commandline-checkpoint.pth
+# python predict.py /home/workspace/ImageClassifier/flowers/valid/12/image_03997.jpg commandline-checkpoint.pth
+# python predict.py /home/workspace/ImageClassifier/flowers/valid/17/image_03829.jpg commandline-checkpoint.pth
+
+device= torch.device("cuda" if torch.cuda.is_available() and gpu_option else "cpu")
+print (device)
+
+def load_checkpoint(filepath):
+    checkpoint = torch.load(filepath)
+    model = models.vgg16(pretrained=True)
+    model.classifier = nn.Sequential(nn.Linear(25088, 512),
+                                 nn.ReLU(),
+                                 nn.Dropout(0.2),
+                                 nn.Linear(512, 102),
+                                 nn.LogSoftmax(dim=1))
+    model.load_state_dict(checkpoint['state_dict'])        
+    model.class_to_idx = checkpoint['class_to_idx']
+    return model
+    
+model = load_checkpoint(args.checkpoint_filename)
+
+def process_image(image):
+    ''' Scales, crops, and normalizes a PIL image for a PyTorch model,
+        returns an Numpy array
+    '''
+    
+    # TODO: Process a PIL image for use in a PyTorch model
+    pil_image = Image.open(image)
     
     
-<link rel="stylesheet" href="/static/components/codemirror/lib/codemirror.css?v=288352df06a67ee35003b0981da414ac">
-<link rel="stylesheet" href="/static/components/codemirror/addon/dialog/dialog.css?v=c89dce10b44d2882a024e7befc2b63f5">
-
-    <link rel="stylesheet" href="/static/style/style.min.css?v=4b4b8cb1e49605137f77fed041f8922b" type="text/css"/>
+    width, height = pil_image.size
+    if width < height:
+        height = float(height) * 256 / float(width)
+        width = 256
+    else:
+        width = float(width) * 256 / float(height)
+        height = 256
     
-
-    <link rel="stylesheet" href="/custom/custom.css" type="text/css" />
-    <script src="/static/components/es6-promise/promise.min.js?v=f004a16cb856e0ff11781d01ec5ca8fe" type="text/javascript" charset="utf-8"></script>
-    <script src="/static/components/preact/index.js?v=00a2fac73c670ce39ac53d26640eb542" type="text/javascript"></script>
-    <script src="/static/components/proptypes/index.js?v=c40890eb04df9811fcc4d47e53a29604" type="text/javascript"></script>
-    <script src="/static/components/preact-compat/index.js?v=aea8f6660e54b18ace8d84a9b9654c1c" type="text/javascript"></script>
-    <script src="/static/components/requirejs/require.js?v=951f856e81496aaeec2e71a1c2c0d51f" type="text/javascript" charset="utf-8"></script>
-    <script>
-      require.config({
-          
-          urlArgs: "v=20200911132325",
-          
-          baseUrl: '/static/',
-          paths: {
-            'auth/js/main': 'auth/js/main.min',
-            custom : '/custom',
-            nbextensions : '/nbextensions',
-            kernelspecs : '/kernelspecs',
-            underscore : 'components/underscore/underscore-min',
-            backbone : 'components/backbone/backbone-min',
-            jed: 'components/jed/jed',
-            jquery: 'components/jquery/jquery.min',
-            json: 'components/requirejs-plugins/src/json',
-            text: 'components/requirejs-text/text',
-            bootstrap: 'components/bootstrap/js/bootstrap.min',
-            bootstraptour: 'components/bootstrap-tour/build/js/bootstrap-tour.min',
-            'jquery-ui': 'components/jquery-ui/jquery-ui.min',
-            moment: 'components/moment/min/moment-with-locales',
-            codemirror: 'components/codemirror',
-            termjs: 'components/xterm.js/xterm',
-            typeahead: 'components/jquery-typeahead/dist/jquery.typeahead.min',
-          },
-          map: { // for backward compatibility
-              "*": {
-                  "jqueryui": "jquery-ui",
-              }
-          },
-          shim: {
-            typeahead: {
-              deps: ["jquery"],
-              exports: "typeahead"
-            },
-            underscore: {
-              exports: '_'
-            },
-            backbone: {
-              deps: ["underscore", "jquery"],
-              exports: "Backbone"
-            },
-            bootstrap: {
-              deps: ["jquery"],
-              exports: "bootstrap"
-            },
-            bootstraptour: {
-              deps: ["bootstrap"],
-              exports: "Tour"
-            },
-            "jquery-ui": {
-              deps: ["jquery"],
-              exports: "$"
-            }
-          },
-          waitSeconds: 30,
-      });
-
-      require.config({
-          map: {
-              '*':{
-                'contents': 'services/contents',
-              }
-          }
-      });
-
-      // error-catching custom.js shim.
-      define("custom", function (require, exports, module) {
-          try {
-              var custom = require('custom/custom');
-              console.debug('loaded custom.js');
-              return custom;
-          } catch (e) {
-              console.error("error loading custom.js", e);
-              return {};
-          }
-      })
-
-    document.nbjs_translations = {"domain": "nbjs", "locale_data": {"nbjs": {"": {"domain": "nbjs"}}}};
-    document.documentElement.lang = navigator.language.toLowerCase();
-    </script>
-
+    pil_image.show()
+    
+    print(f"box before crop: {pil_image.getbbox()}")
+    
+    size = 256, 256
+    pil_image.thumbnail(size)
+    #left, upper, right, lower
+    
+    print(f"box after resize, before crop: {pil_image.getbbox()} height {height} width {width}")
     
     
-
-</head>
-
-<body class="edit_app "
- 
-data-base-url="/"
-data-file-path="aipnd-project/predict.py"
-
-  
- 
-
-dir="ltr">
-
-<noscript>
-    <div id='noscript'>
-      Jupyter Notebook requires JavaScript.<br>
-      Please enable it to proceed. 
-  </div>
-</noscript>
-
-<div id="header">
-  <div id="header-container" class="container">
-  <div id="ipython_notebook" class="nav navbar-brand"><a href="/tree" title='dashboard'>
-      <img src='/static/base/images/logo.png?v=641991992878ee24c6f3826e81054a0f' alt='Jupyter Notebook'/>
-  </a></div>
-
-  
-
-<span id="save_widget" class="pull-left save_widget">
-    <span class="filename"></span>
-    <span class="last_modified"></span>
-</span>
-
-
-  
-  
-  
-  
-
-    <span id="login_widget">
-      
-    </span>
-
-  
-
-  
-  
-  </div>
-  <div class="header-bar"></div>
-
-  
-
-<div id="menubar-container" class="container">
-  <div id="menubar">
-    <div id="menus" class="navbar navbar-default" role="navigation">
-      <div class="container-fluid">
-          <p  class="navbar-text indicator_area">
-          <span id="current-mode" >current mode</span>
-          </p>
-        <button type="button" class="btn btn-default navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
-          <i class="fa fa-bars"></i>
-          <span class="navbar-text">Menu</span>
-        </button>
-        <ul class="nav navbar-nav navbar-right">
-          <li id="notification_area"></li>
-        </ul>
-        <div class="navbar-collapse collapse">
-          <ul class="nav navbar-nav">
-            <li class="dropdown"><a href="#" class="dropdown-toggle" data-toggle="dropdown">File</a>
-              <ul id="file-menu" class="dropdown-menu">
-                <li id="new-file"><a href="#">New</a></li>
-                <li id="save-file"><a href="#">Save</a></li>
-                <li id="rename-file"><a href="#">Rename</a></li>
-                <li id="download-file"><a href="#">Download</a></li>
-              </ul>
-            </li>
-            <li class="dropdown"><a href="#" class="dropdown-toggle" data-toggle="dropdown">Edit</a>
-              <ul id="edit-menu" class="dropdown-menu">
-                <li id="menu-find"><a href="#">Find</a></li>
-                <li id="menu-replace"><a href="#">Find &amp; Replace</a></li>
-                <li class="divider"></li>
-                <li class="dropdown-header">Key Map</li>
-                <li id="menu-keymap-default"><a href="#">Default<i class="fa"></i></a></li>
-                <li id="menu-keymap-sublime"><a href="#">Sublime Text<i class="fa"></i></a></li>
-                <li id="menu-keymap-vim"><a href="#">Vim<i class="fa"></i></a></li>
-                <li id="menu-keymap-emacs"><a href="#">emacs<i class="fa"></i></a></li>
-              </ul>
-            </li>
-            <li class="dropdown"><a href="#" class="dropdown-toggle" data-toggle="dropdown">View</a>
-              <ul id="view-menu" class="dropdown-menu">
-              <li id="toggle_header" title="Show/Hide the logo and notebook title (above menu bar)">
-              <a href="#">Toggle Header</a></li>
-              <li id="menu-line-numbers"><a href="#">Toggle Line Numbers</a></li>
-              </ul>
-            </li>
-            <li class="dropdown"><a href="#" class="dropdown-toggle" data-toggle="dropdown">Language</a>
-              <ul id="mode-menu" class="dropdown-menu">
-              </ul>
-            </li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="lower-header-bar"></div>
-
-
-</div>
-
-<div id="site">
-
-
-<div id="texteditor-backdrop">
-<div id="texteditor-container" class="container"></div>
-</div>
-
-
-</div>
-
-
-
-
-
-
+    pil_image.show()
     
+    left = (width - 224) / 2
+    right = left + 224
+    upper = (height - 224) / 2
+    lower = upper + 224
+    
+    print(f"left: {left} right: {right} upper:{upper} lower:{lower}")
+    
+    pil_image = pil_image.crop((left,upper,right,lower))
+    print(pil_image.getbbox())
 
+    np_image = np.array(pil_image) / 255 #Color channels of images are encoded 0-255, model expected floats 0-1. Y
+    
+    mean = np.array([0.485, 0.456, 0.406]) 
+    std = np.array([0.229, 0.224, 0.225])
+    np_image = (np_image - mean) / std #Subtract the means from each color channel, then divide by the standard deviation.
+    
+    np_image_transpose = np_image.transpose((2, 0, 1))
+    
+    toFloatTensor  = torch.from_numpy(np_image_transpose).type(torch.FloatTensor)
+    
+    #https://knowledge.udacity.com/questions/164455
+    return(toFloatTensor)
 
-<script src="/static/edit/js/main.min.js?v=ac978ed627b00fbfa328acc3f14b22fb" type="text/javascript" charset="utf-8"></script>
+def predict(image_path, model, topk=5):
+    ''' Predict the class (or classes) of an image using a trained deep learning model.
+    '''
+    print(f"image_path: {image_path}")
+    # TODO: Implement the code to predict the class from an image file
+    image = process_image(image_path)
+    if device == 'cuda':        
+        model = model.cuda()
+    image = image.unsqueeze(0)
+    #unsqueeze from here https://discuss.pytorch.org/t/how-to-classify-single-image-using-loaded-net/1411
+    #image_path = image_path.unsqueeze(0)  
+    log_ps = model(image)
+    ps = torch.exp(log_ps)
+    top_p, top_class = ps.topk(topk)
+    print(f"top_p: {top_p}")
+    #source https://stackoverflow.com/questions/34097281/how-can-i-convert-a-tensor-into-a-numpy-array-in-tensorflow
+    top_p = top_p.cpu()
+    top_p = top_p.detach().numpy()
+    top_class = top_class.cpu()
+    top_class = top_class.detach().numpy()
+    return top_p[0], top_class[0]
 
+model = load_checkpoint(checkpoint_filename)
 
-<script type='text/javascript'>
-  function _remove_token_from_url() {
-    if (window.location.search.length <= 1) {
-      return;
-    }
-    var search_parameters = window.location.search.slice(1).split('&');
-    for (var i = 0; i < search_parameters.length; i++) {
-      if (search_parameters[i].split('=')[0] === 'token') {
-        // remote token from search parameters
-        search_parameters.splice(i, 1);
-        var new_search = '';
-        if (search_parameters.length) {
-          new_search = '?' + search_parameters.join('&');
-        }
-        var new_url = window.location.origin + 
-                      window.location.pathname + 
-                      new_search + 
-                      window.location.hash;
-        window.history.replaceState({}, "", new_url);
-        return;
-      }
-    }
-  }
-  _remove_token_from_url();
-</script>
-</body>
+import json
+with open('cat_to_name.json', 'r') as f:
+    cat_to_name = json.load(f)
 
-</html>
+probs, classes= predict(args.image_filename, model, topk=args.top_k)
+print(f"probs: {probs} classes {classes}")
+print([cat_to_name[str(i)] for i in classes])
